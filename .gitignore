@@ -1,0 +1,24 @@
+# Secrets - NEVER share your API keys
+.env
+
+# Environments - These are large folders created by your computer locally
+.venv/
+venv/
+env/
+node_modules/
+
+# Python cache - Internal files Python creates to run faster
+src/__pycache__/
+__pycache__/
+*.pyc
+
+# Database - Usually, we share the script (database.py), not the actual .db file
+data/*.db
+*.db
+
+# OS specific files - Garbage files created by Windows or Mac
+.DS_Store
+Thumbs.db
+
+# Notebook Checkpoints
+.ipynb_checkpoints/
