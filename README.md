@@ -5,7 +5,7 @@ An intelligent assistant that translates natural language into SQL queries to an
 ## 📁 Project Structure
 - `data/`: Contains the SQLite database.
 - `src/`: Core application logic (`app.py`, `database.py`).
-- `test_queries.ipynb`: Technical validation of SQL logic.
+<!-- - `test_queries.ipynb`: Technical validation of SQL logic. -->
 
 ## 🚀 Quick Start
 1. Install dependencies: `pip install -r requirements.txt`
