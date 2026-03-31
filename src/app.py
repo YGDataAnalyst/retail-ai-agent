@@ -1,98 +1,206 @@
 import streamlit as st
 import pandas as pd
-from sqlalchemy import create_engine
+import plotly.express as px
 from database import setup_database  # Import the setup_database function
 from agent import create_retail_agent  # Import the agent creation function
 
-db_engine = setup_database()
-agent_executor = create_retail_agent(db_engine)  # The brain is now separate!
+# 1. Professional Page Setup
 
-st.set_page_config(page_title="AI Data Agent", layout="wide")
+st.set_page_config(page_title="Retail Insights AI", layout="wide", page_icon="📈")
 
-# 5. SIDEBAR (Management)
-with st.sidebar:
-    st.title("⚙️ Settings")
-    st.success("Connected to retail_pro.db")
-    if st.button("🗑️ Clear Chat History"):
-        st.session_state.messages = []
-        st.rerun()
-    st.divider()
-    st.info("This agent uses Llama-3.3 to translate your questions into SQL queries.")
-
-# 6. UI HEADER
-st.title("📊 Retail Intelligence Agent")
 st.markdown(
     """
-Welcome! Use the buttons below for quick insights or type your custom question in the chat.
-"""
+    <style>
+    .main { background-color: #fcfcfc; }
+    .stButton>button {
+        border-radius: 10px;
+        height: 3.5em;
+        background-color: white;
+        border: 1px solid #e0e0e0;
+        transition: 0.3s;
+        font-weight: bold;
+    }
+    .stButton>button:hover {
+        border-color: #4A90E2;
+        background-color: #f0f7ff;
+        color: #4A90E2;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
-# 7. INITIALIZE HISTORY
+
+# 2. System Initialization
+@st.cache_resource
+def get_agent():
+    db_engine = setup_database()
+    return create_retail_agent(db_engine), db_engine
+
+
+agent_executor, db_engine = get_agent()
+
+# 3. Sidebar
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/3094/3094851.png", width=80)
+    st.title("Admin Panel")
+    st.success("Database Connected")
+    if st.button("🗑️ Clear Conversation"):
+        st.session_state.messages = []
+        st.session_state.pending_query = None
+        st.rerun()
+    st.divider()
+    st.info("System: Llama-3.3 + LangChain Agent")
+
+# 4. Header Section
+st.title("📊 Retail Intelligence Agent")
+st.markdown("Empowering retail decisions through AI-driven data exploration.")
+
+# 5. Session States
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "pending_query" not in st.session_state:
+    st.session_state.pending_query = None
 
+# Display History
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
-# 8. QUICK ACTIONS (Buttons)
-def handle_quick_question(question):
-    # This function adds the question and triggers the response immediately
-    st.session_state.messages.append({"role": "user", "content": question})
-    with st.chat_message("assistant"):
-        with st.spinner("Analyzing..."):
-            response = agent_executor.invoke({"input": question})
-            output = response["output"]
-            st.markdown(output)
+# 6. Quick Action Buttons
+st.write("### 💡 Quick Actions")
+cols = st.columns(3)
+quick_queries = [
+    {"label": "📈 Daily Sales Trend", "q": "Show daily sales trend in a line chart"},
+    {
+        "label": "📊 Category Insights",
+        "q": "Show a list of the top selling product categories for the top performing managers, including their store city and total profit.",
+    },
+    {
+        "label": "🏆 Top Managers",
+        "q": "Show top managers by total profit in a bar chart",
+    },
+]
 
-            # Automatic charting for sales queries
-            if "sales" in question.lower() or "trend" in question.lower():
-                query = "SELECT date, SUM(quantity * sale_price) as total FROM fact_sales s JOIN dim_products p ON s.product_id = p.product_id GROUP BY date"
-                df = pd.read_sql(query, db_engine)
-                st.line_chart(df.set_index("date"))
+for i, q in enumerate(quick_queries):
+    if cols[i].button(q["label"]):
+        st.session_state.pending_query = q["q"]
+        st.rerun()
 
-    st.session_state.messages.append({"role": "assistant", "content": output})
-    st.rerun()
+# 7. Main Query Input
+prompt = st.chat_input("Ask about sales, stock, or performance...")
 
+query_to_run = None
+if st.session_state.pending_query:
+    query_to_run = st.session_state.pending_query
+    st.session_state.pending_query = None
+elif prompt:
+    query_to_run = prompt
 
-st.subheader("💡 Quick Actions")
-col1, col2, col3 = st.columns(3)
-with col1:
-    if st.button("📋 Total Sales"):
-        handle_quick_question("Show me the total sales table by date")
-with col2:
-    if st.button("⚠️ Stock Alert"):
-        handle_quick_question(
-            "Which products have low stock, quantity, and what are their categories?"
-        )
-with col3:
-    if st.button("🏆 Top Managers"):
-        handle_quick_question("Who are the managers of the stores with most sales?")
-
-st.divider()
-
-# 9. CHAT HISTORY DISPLAY
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# 10. CHAT INPUT
-if prompt := st.chat_input("Ask about products, sales, or managers..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
+if query_to_run:
+    st.session_state.messages.append({"role": "user", "content": query_to_run})
     with st.chat_message("user"):
-        st.markdown(prompt)
+        st.markdown(query_to_run)
 
     with st.chat_message("assistant"):
-        with st.spinner("Searching database..."):
-            response = agent_executor.invoke({"input": prompt})
-            full_response = response["output"]
-            st.markdown(full_response)
+        with st.spinner("Analyzing data infrastructure..."):
+            try:
+                res = agent_executor.invoke({"input": query_to_run})
+                output = res["output"]
+                st.markdown(output)
 
-            # Optional: Automatic Charting logic for manual input
-            if "chart" in prompt.lower() or "graph" in prompt.lower():
-                try:
-                    # Basic sales chart logic
-                    query = "SELECT date, SUM(quantity * sale_price) as total FROM fact_sales s JOIN dim_products p ON s.product_id = p.product_id GROUP BY date"
-                    df = pd.read_sql(query, db_engine)
-                    st.line_chart(df.set_index("date"))
-                except:
-                    st.warning("I couldn't generate a chart for this specific request.")
+                # --- ENHANCED VISUALIZATION ENGINE ---
+                q_lower = query_to_run.lower()
 
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
+                # Only visualize if explicit keywords are present (avoiding ghost charts for single item queries)
+                visual_keywords = [
+                    "chart",
+                    "graph",
+                    "plot",
+                    "trend",
+                    "visualize",
+                    "ranking",
+                    "bar chart",
+                    "line chart",
+                ]
+                should_visualize = any(word in q_lower for word in visual_keywords)
+
+                if should_visualize:
+                    st.divider()
+                    st.subheader("Visual Analysis")
+
+                    # 1. Sales Trend
+                    if "sales" in q_lower or "trend" in q_lower:
+                        sql = "SELECT date, SUM(quantity * sale_price) as total_sales FROM fact_sales fs JOIN dim_products dp ON fs.product_id = dp.product_id GROUP BY date ORDER BY date"
+                        df = pd.read_sql(sql, db_engine)
+                        if not df.empty:
+                            fig = px.line(
+                                df,
+                                x=df.columns[0],
+                                y=df.columns[1],
+                                title="Daily Sales Performance",
+                                labels={
+                                    df.columns[1]: "Revenue ($)",
+                                    df.columns[0]: "Date",
+                                },
+                                markers=True,
+                                template="plotly_white",
+                            )
+                            # fig.update_traces(line_color='#4A90E2', line_width=3)
+                            st.plotly_chart(fig, use_container_width=True)
+
+                    # 2. Stock Levels (Red for critical)
+                    elif "category" in q_lower:
+                        sql = """
+                            SELECT dp.category, ds.city, SUM((dp.sale_price - dp.cost) * fs.quantity) as profit
+                            FROM fact_sales fs
+                            JOIN dim_products dp ON fs.product_id = dp.product_id
+                            JOIN dim_stores ds ON fs.store_id = ds.store_id
+                            GROUP BY dp.category, ds.city ORDER BY profit DESC
+                        """
+                        df = pd.read_sql(sql, db_engine)
+                        if not df.empty:
+                            # Gráfico de barras desglosado por ciudad para mayor detalle
+                            fig = px.bar(
+                                df,
+                                x="category",
+                                y="profit",
+                                color="city",
+                                barmode="group",
+                                title="Profit by Category and City",
+                                color_discrete_sequence=px.colors.qualitative.Prism,
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+
+                    # 3. Manager Profit (Multiple tables join)
+                    elif "manager" in q_lower:
+                        sql = """
+                            SELECT ds.manager, SUM((dp.sale_price - dp.cost) * fs.quantity) as total_profit
+                            FROM fact_sales fs
+                            JOIN dim_products dp ON fs.product_id = dp.product_id
+                            JOIN dim_stores ds ON fs.store_id = ds.store_id
+                            GROUP BY ds.manager ORDER BY total_profit DESC
+                        """
+                        df = pd.read_sql(sql, db_engine)
+                        if not df.empty:
+                            fig = px.bar(
+                                df,
+                                x="manager",
+                                y="total_profit",
+                                title="Total Profit by Store Manager",
+                                labels={
+                                    "total_profit": "Profit ($)",
+                                    "manager": "Manager",
+                                },
+                                color="total_profit",
+                                color_continuous_scale="Bluered_r",
+                            )
+                            fig.update_layout(coloraxis_showscale=False)
+                            st.plotly_chart(fig, use_container_width=True)
+
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": output}
+                )
+
+            except Exception as e:
+                st.error(f"Analytical Exception: {str(e)}")

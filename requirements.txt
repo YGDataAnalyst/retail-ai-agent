@@ -9,3 +9,4 @@ langchain-community==0.4.1
 python-dotenv==1.2.2
 matplotlib==3.10.8
 ipykernel==7.2.0
+plotly==6.6.0
